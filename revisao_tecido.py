@@ -7,20 +7,18 @@ st.set_page_config(page_title="Revisão NBR 13484 - TOTVS", layout="wide")
 # --- ESTILIZAÇÃO CSS CUSTOMIZADA ---
 st.markdown("""
     <style>
-    /* Molduras para as seções */
-    .section-box {
+    /* Moldura apenas para a seção de identificação (Sidebar) */
+    .sidebar-box {
         border: 1px solid #d1d1d1;
-        padding: 20px;
+        padding: 15px;
         border-radius: 8px;
-        margin-bottom: 20px;
         background-color: #ffffff;
+        margin-bottom: 20px;
     }
-    /* Estilização da Barra Lateral */
-    section[data-testid="stSidebar"] {
-        background-color: #f8f9fa;
-        border-right: 1px solid #d1d1d1;
+    /* Estilo limpo para o corpo principal */
+    .main-section {
+        padding: 10px 0px;
     }
-    /* Ajuste de métricas */
     [data-testid="stMetricValue"] {
         font-size: 24px;
     }
@@ -51,15 +49,19 @@ if 'last_product' not in st.session_state:
 
 # --- BARRA LATERAL (MOLDURA: IDENTIFICAÇÃO DO LOTE) ---
 with st.sidebar:
-    # Inserção do Logo (Utilizando o link da imagem enviada ou arquivo local)
     st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/TOTVS.svg/1280px-TOTVS.svg.png", width=180)
     
-    st.markdown('<div class="section-box">', unsafe_allow_html=True)
+    # Popup de Configuração de Parâmetros (IP)
+    with st.popover("⚙️ Configurar Limites IP"):
+        st.write("Defina os limites para classificação:")
+        limite_1a = st.number_input("Limite Máximo 1ª Qualidade", value=20.0)
+        limite_2a = st.number_input("Limite Máximo 2ª Qualidade", value=40.0)
+    
+    st.markdown('<div class="sidebar-box">', unsafe_allow_html=True)
     st.subheader("Identificação do Lote")
     
     cod_selecionado = st.selectbox("Código do Produto", df_produtos["Código do Produto"].tolist())
     
-    # Reset se mudar o produto
     if cod_selecionado != st.session_state.last_product:
         st.session_state.defeitos = []
         st.session_state.last_product = cod_selecionado
@@ -73,12 +75,12 @@ with st.sidebar:
     comprimento = st.number_input("Comprimento (m)", value=50.0)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- PAINEL PRINCIPAL (MOLDURA: REVISÃO DE TECIDOS) ---
-st.title("Sistema de Inspeção de Qualidade")
+# --- CORPO PRINCIPAL (SEM MOLDURAS EXTERNAS) ---
+st.header("Sistema de Inspeção de Qualidade")
 
-st.markdown('<div class="section-box">', unsafe_allow_html=True)
+# Seção de Revisão
 st.subheader("Revisão de Tecidos Planos - NBR 13484")
-st.write(f"**Produto:** {cod_selecionado} - {dados_prod['Texto breve material']}")
+st.write(f"**Produto Selecionado:** {cod_selecionado} - {dados_prod['Texto breve material']}")
 
 col_input, col_view = st.columns([1, 1.5])
 
@@ -101,30 +103,30 @@ with col_view:
         st.table(df_atual)
         total_pts = df_atual["Pontos"].sum()
     else:
-        st.info("Nenhum defeito registrado neste rolo.")
+        st.info("Aguardando registro de defeitos...")
         total_pts = 0
 
-# --- CÁLCULO E CLASSIFICAÇÃO EM TEMPO REAL ---
+# --- CÁLCULO E CLASSIFICAÇÃO COM BASE NA PARAMETRIZAÇÃO DO POPUP ---
 ip = (total_pts * 100000) / (largura * comprimento) if (largura * comprimento) > 0 else 0
-if ip <= 20: 
+
+if ip <= limite_1a: 
     status, cor = "1ª QUALIDADE", "#28a745"
-elif ip <= 40: 
+elif ip <= limite_2a: 
     status, cor = "2ª QUALIDADE", "#ffc107"
 else: 
     status, cor = "REPROVADO", "#dc3545"
 
+st.divider()
 c1, c2, c3 = st.columns(3)
 c1.metric("Total de Pontos", f"{total_pts} pts")
 c2.metric("Índice (IP)", f"{ip:.2f}")
-c3.markdown(f"**Classificação Atual:** <br> <span style='font-size:24px; color:{cor}; font-weight:bold;'>{status}</span>", unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+c3.markdown(f"**Classificação:** <br> <span style='font-size:24px; color:{cor}; font-weight:bold;'>{status}</span>", unsafe_allow_html=True)
 
-# --- SEÇÃO DE RELATÓRIOS (MOLDURA: GERAR RELATÓRIOS) ---
-st.markdown('<div class="section-box">', unsafe_allow_html=True)
+# --- SEÇÃO DE RELATÓRIOS (SEM MOLDURA) ---
+st.divider()
 st.subheader("Gerar Relatórios")
 
 if st.button("Finalizar e Salvar Inspeção"):
-    # Salva no histórico acumulado
     registro = dados_prod.to_dict()
     registro.update({
         "Largura": largura,
@@ -134,13 +136,12 @@ if st.button("Finalizar e Salvar Inspeção"):
         "Resultado": status
     })
     st.session_state.historico.append(registro)
-    st.success("Dados enviados para o histórico com sucesso!")
+    st.success("Inspeção salva no histórico!")
 
 if st.session_state.historico:
-    st.write("**Histórico de Inspeções da Sessão:**")
+    st.write("**Histórico Acumulado:**")
     st.dataframe(pd.DataFrame(st.session_state.historico), use_container_width=True)
     
     if st.button("Limpar Histórico"):
         st.session_state.historico = []
         st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
