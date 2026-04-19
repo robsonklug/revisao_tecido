@@ -4,23 +4,35 @@ import pandas as pd
 # Configuração da página
 st.set_page_config(page_title="Revisão NBR 13484 - TOTVS", layout="wide")
 
-# --- ESTILIZAÇÃO CSS CUSTOMIZADA ---
+# --- ESTILIZAÇÃO CSS AVANÇADA ---
 st.markdown("""
     <style>
-    /* Moldura apenas para a seção de identificação (Sidebar) */
+    /* 1. Bloqueio de interação em áreas de leitura (Textos e Títulos) */
+    h1, h2, h3, p, span, .stMarkdown, .stCaption {
+        pointer-events: none; /* O mouse 'atravessa' esses elementos */
+        user-select: none;    /* Impede selecionar o texto */
+    }
+
+    /* 2. Reabilita interação apenas nos inputs e botões */
+    .stButton, .stNumberInput, .stSelectbox, .stTextInput, .stPopover, button, input {
+        pointer-events: auto !important;
+    }
+
+    /* 3. Moldura para a Seção de Identificação */
+    [data-testid="stSidebar"] .sidebar-content {
+        padding: 10px;
+    }
     .sidebar-box {
         border: 1px solid #d1d1d1;
         padding: 15px;
         border-radius: 8px;
         background-color: #ffffff;
-        margin-bottom: 20px;
+        pointer-events: auto !important;
     }
-    /* Estilo limpo para o corpo principal */
-    .main-section {
-        padding: 10px 0px;
-    }
-    [data-testid="stMetricValue"] {
-        font-size: 24px;
+
+    /* 4. Garantir que o Logo apareça no topo da sidebar */
+    [data-testid="stSidebarNav"] {
+        display: none; /* Esconde menu padrão para focar no logo */
     }
     </style>
     """, unsafe_allow_html=True)
@@ -40,22 +52,19 @@ def carregar_produtos():
 df_produtos = carregar_produtos()
 
 # --- ESTADO DA SESSÃO ---
-if 'defeitos' not in st.session_state:
-    st.session_state.defeitos = []
-if 'historico' not in st.session_state:
-    st.session_state.historico = []
-if 'last_product' not in st.session_state:
-    st.session_state.last_product = ""
+if 'defeitos' not in st.session_state: st.session_state.defeitos = []
+if 'historico' not in st.session_state: st.session_state.historico = []
+if 'last_product' not in st.session_state: st.session_state.last_product = ""
 
-# --- BARRA LATERAL (MOLDURA: IDENTIFICAÇÃO DO LOTE) ---
+# --- BARRA LATERAL ---
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/5/59/TOTVS.svg/1280px-TOTVS.svg.png", width=180)
+    # LOGO TOTVS (Link estável)
+    st.image("https://upload.wikimedia.org/wikipedia/commons/5/59/TOTVS.svg", width=180)
     
-    # Popup de Configuração de Parâmetros (IP)
-    with st.popover("⚙️ Configurar Limites IP"):
-        st.write("Defina os limites para classificação:")
-        limite_1a = st.number_input("Limite Máximo 1ª Qualidade", value=20.0)
-        limite_2a = st.number_input("Limite Máximo 2ª Qualidade", value=40.0)
+    # Popup de Configuração
+    with st.popover("⚙️ Ajustar Limites IP"):
+        limite_1a = st.number_input("Limite 1ª Qualidade", value=20.0)
+        limite_2a = st.number_input("Limite 2ª Qualidade", value=40.0)
     
     st.markdown('<div class="sidebar-box">', unsafe_allow_html=True)
     st.subheader("Identificação do Lote")
@@ -75,12 +84,9 @@ with st.sidebar:
     comprimento = st.number_input("Comprimento (m)", value=50.0)
     st.markdown('</div>', unsafe_allow_html=True)
 
-# --- CORPO PRINCIPAL (SEM MOLDURAS EXTERNAS) ---
+# --- CORPO PRINCIPAL (FOCO EM ENTRADA DE DADOS) ---
 st.header("Sistema de Inspeção de Qualidade")
-
-# Seção de Revisão
 st.subheader("Revisão de Tecidos Planos - NBR 13484")
-st.write(f"**Produto Selecionado:** {cod_selecionado} - {dados_prod['Texto breve material']}")
 
 col_input, col_view = st.columns([1, 1.5])
 
@@ -99,14 +105,13 @@ with col_input:
 
 with col_view:
     if st.session_state.defeitos:
-        df_atual = pd.DataFrame(st.session_state.defeitos)
-        st.table(df_atual)
-        total_pts = df_atual["Pontos"].sum()
+        total_pts = sum(d['Pontos'] for d in st.session_state.defeitos)
+        st.table(pd.DataFrame(st.session_state.defeitos))
     else:
-        st.info("Aguardando registro de defeitos...")
+        st.info("Utilize os campos ao lado para registrar defeitos.")
         total_pts = 0
 
-# --- CÁLCULO E CLASSIFICAÇÃO COM BASE NA PARAMETRIZAÇÃO DO POPUP ---
+# --- CÁLCULO E CLASSIFICAÇÃO ---
 ip = (total_pts * 100000) / (largura * comprimento) if (largura * comprimento) > 0 else 0
 
 if ip <= limite_1a: 
@@ -122,26 +127,18 @@ c1.metric("Total de Pontos", f"{total_pts} pts")
 c2.metric("Índice (IP)", f"{ip:.2f}")
 c3.markdown(f"**Classificação:** <br> <span style='font-size:24px; color:{cor}; font-weight:bold;'>{status}</span>", unsafe_allow_html=True)
 
-# --- SEÇÃO DE RELATÓRIOS (SEM MOLDURA) ---
+# --- RELATÓRIOS ---
 st.divider()
 st.subheader("Gerar Relatórios")
 
 if st.button("Finalizar e Salvar Inspeção"):
     registro = dados_prod.to_dict()
-    registro.update({
-        "Largura": largura,
-        "Metragem": comprimento,
-        "Pontos": total_pts,
-        "IP": round(ip, 2),
-        "Resultado": status
-    })
+    registro.update({"IP": round(ip, 2), "Resultado": status, "Total Pts": total_pts})
     st.session_state.historico.append(registro)
-    st.success("Inspeção salva no histórico!")
+    st.success("Inspeção arquivada!")
 
 if st.session_state.historico:
-    st.write("**Histórico Acumulado:**")
     st.dataframe(pd.DataFrame(st.session_state.historico), use_container_width=True)
-    
     if st.button("Limpar Histórico"):
         st.session_state.historico = []
         st.rerun()
